@@ -1,0 +1,12 @@
+node_modules/
+.env
+*.db
+*.db-shm
+*.db-wal
+dist/
+.DS_Store
+debug_*.js
+check_*.js
+*.log
+keys/
+__MACOSX/
