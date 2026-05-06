@@ -1,0 +1,3 @@
+{
+  "ignore": ["jeeves.db", "jeeves.db-journal", "debug_*.js", "check_*.js", "*.log"]
+}

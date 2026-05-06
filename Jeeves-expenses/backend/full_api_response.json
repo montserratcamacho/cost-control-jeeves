@@ -1,0 +1,168 @@
+{
+  "links": {
+    "next": "/v1/cards/transactions?pageSize=5&startDate=2026-04-28&endDate=2026-04-28&pageCursor=MTI7eyJ0cmFuc2FjdGlvbklkIjoiMTEwNzkzMTYiLCJjcmVhdGVkQXQiOiIxNzc3MjM0OTAwNDg4In0"
+  },
+  "pagination": {
+    "pageSize": 5,
+    "totalCount": 12,
+    "nextCursor": "MTI7eyJ0cmFuc2FjdGlvbklkIjoiMTEwNzkzMTYiLCJjcmVhdGVkQXQiOiIxNzc3MjM0OTAwNDg4In0",
+    "hasNext": true
+  },
+  "data": [
+    {
+      "id": "3611721a-6e8b-49e8-8653-7cf4719bca49",
+      "productType": "credit_line",
+      "company": {
+        "id": "94f4e8e2-e151-488a-b1ae-8778eb71cc72",
+        "name": "Prima"
+      },
+      "user": {
+        "id": "d2855336-e8ba-4f78-a0ac-c22d47c47b4a",
+        "name": "Jorge Rojas",
+        "email": "jorge.rojas@prima.ai"
+      },
+      "card": {
+        "id": "2296f171-f3c7-4793-abf1-cf622496e1b2",
+        "name": "physical",
+        "type": "physical",
+        "lastFourDigits": "7142"
+      },
+      "merchant": {
+        "name": "MERCADOPAGO *DONTACO   Nicols Romero MEX",
+        "merchantCategoryCode": "5411",
+        "merchantCategoryCodeDescription": "Grocery Stores, Supermarkets"
+      },
+      "transactionType": "debit",
+      "transactionDate": "2026-04-25 07:14:14",
+      "settlementDate": "2026-04-28 10:00:03",
+      "transactionAmount": 311.3,
+      "transactionCurrency": "MXN",
+      "localAmount": 311.3,
+      "localCurrency": "MXN"
+    },
+    {
+      "id": "43b7cffa-4627-4708-ab94-99fcb29a5e72",
+      "productType": "credit_line",
+      "company": {
+        "id": "94f4e8e2-e151-488a-b1ae-8778eb71cc72",
+        "name": "Prima"
+      },
+      "user": {
+        "id": "b427ae7e-bbed-4d53-8958-5c572c3c25be",
+        "name": "Jose Arechavala",
+        "email": "jose.arechavala@prima.ai"
+      },
+      "card": {
+        "id": "8512799d-49fa-4888-8b9b-064447529d1a",
+        "name": "Physical",
+        "type": "physical",
+        "lastFourDigits": "4217"
+      },
+      "merchant": {
+        "name": "SERVICIO HERMANOS SILV CIUDAD DE MEX MEX",
+        "merchantCategoryCode": "5541",
+        "merchantCategoryCodeDescription": "Service Stations (with or without Ancillary Services)"
+      },
+      "transactionType": "debit",
+      "transactionDate": "2026-04-25 20:49:51",
+      "settlementDate": "2026-04-28 10:00:38",
+      "transactionAmount": 996.5,
+      "transactionCurrency": "MXN",
+      "localAmount": 996.5,
+      "localCurrency": "MXN"
+    },
+    {
+      "id": "51263ea1-9eaa-49fe-80be-d5892fe065be",
+      "productType": "credit_line",
+      "company": {
+        "id": "94f4e8e2-e151-488a-b1ae-8778eb71cc72",
+        "name": "Prima"
+      },
+      "user": {
+        "id": "16fa685b-84cf-4a0a-ac49-b098c304a723",
+        "name": "Cesar Gonzales",
+        "email": "cesar@prima.ai"
+      },
+      "card": {
+        "id": "aee93b2e-94ea-4ac6-9c23-80cde0ee59bb",
+        "name": "Tech Expenses",
+        "type": "virtual",
+        "lastFourDigits": "7852"
+      },
+      "merchant": {
+        "name": "SUPABASE               SINGAPORE     SGP",
+        "merchantCategoryCode": "5734",
+        "merchantCategoryCodeDescription": "Computer Software Stores"
+      },
+      "transactionType": "debit",
+      "transactionDate": "2026-04-26 11:09:56",
+      "settlementDate": "2026-04-28 10:00:31",
+      "transactionAmount": 641.71,
+      "transactionCurrency": "MXN",
+      "localAmount": 35.19,
+      "localCurrency": "USD"
+    },
+    {
+      "id": "fa78dbd0-babe-496b-8cac-a8ff019d4d45",
+      "productType": "credit_line",
+      "company": {
+        "id": "94f4e8e2-e151-488a-b1ae-8778eb71cc72",
+        "name": "Prima"
+      },
+      "user": {
+        "id": "2879a5cb-f470-445d-8ddf-107e6e7985b1",
+        "name": "Manuel Caldera Urcuyo",
+        "email": "manuel.caldera@prima.ai"
+      },
+      "card": {
+        "id": "46e9a0e2-54a8-4384-9eb8-3e08da15fdd5",
+        "name": "virtual",
+        "type": "virtual",
+        "lastFourDigits": "4027"
+      },
+      "merchant": {
+        "name": "UBER   *TRIP           SAN FRANCISCO USA",
+        "merchantCategoryCode": "4121",
+        "merchantCategoryCodeDescription": "Limousines and Taxicabs"
+      },
+      "transactionType": "debit",
+      "transactionDate": "2026-04-26 18:47:03",
+      "settlementDate": "2026-04-28 10:00:41",
+      "transactionAmount": 91.18,
+      "transactionCurrency": "MXN",
+      "localAmount": 5,
+      "localCurrency": "USD"
+    },
+    {
+      "id": "9409d0f8-881e-4583-a830-2428019a7878",
+      "productType": "credit_line",
+      "company": {
+        "id": "94f4e8e2-e151-488a-b1ae-8778eb71cc72",
+        "name": "Prima"
+      },
+      "user": {
+        "id": "d2855336-e8ba-4f78-a0ac-c22d47c47b4a",
+        "name": "Jorge Rojas",
+        "email": "jorge.rojas@prima.ai"
+      },
+      "card": {
+        "id": "2296f171-f3c7-4793-abf1-cf622496e1b2",
+        "name": "physical",
+        "type": "physical",
+        "lastFourDigits": "7142"
+      },
+      "merchant": {
+        "name": "COMB PROGRESO IND 3    NICOLAS ROMER MEX",
+        "merchantCategoryCode": "5541",
+        "merchantCategoryCodeDescription": "Service Stations (with or without Ancillary Services)"
+      },
+      "transactionType": "debit",
+      "transactionDate": "2026-04-26 20:21:40",
+      "settlementDate": "2026-04-28 10:00:39",
+      "transactionAmount": 1260,
+      "transactionCurrency": "MXN",
+      "localAmount": 1260,
+      "localCurrency": "MXN"
+    }
+  ]
+}

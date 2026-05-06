@@ -1,0 +1,219 @@
+<script>
+    // Dashboard.html — Charts & dashboard logic (uses Chart.js loaded in Index.html)
+    var _chartInstances = {};
+
+    function renderDashboard() {
+        var data = computeDashboard();
+        renderDashStats(data);
+        renderMonthlyChart(data.byMonth);
+        renderExpenseTypeChart(data.byExpenseType);
+        renderPersonTable(data.byPerson);
+        renderPOTable(data.byPO);
+        renderJeevesCatTable(data.byJeevesCategory);
+    }
+
+    function computeDashboard() {
+        var dFrom = document.getElementById('dFrom') ? document.getElementById('dFrom').value : '';
+        var dTo = document.getElementById('dTo') ? document.getElementById('dTo').value : '';
+        var dUser = document.getElementById('dUser') ? document.getElementById('dUser').value : '';
+
+        var txns = S.transactions.filter(function (t) {
+            if (dFrom && t.posted_at_utc && t.posted_at_utc < dFrom) return false;
+            if (dTo && t.posted_at_utc && t.posted_at_utc > dTo + 'T23:59') return false;
+            if (dUser && t.user_email !== dUser) return false;
+            return true;
+        });
+
+        var byMonth = {}, byPO = {}, byPerson = {}, byExpType = {}, byJeevCat = {};
+        var totalSpend = 0, totalTxns = 0;
+
+        txns.forEach(function (t) {
+            var amount = parseFloat(t.amount_destination) || parseFloat(t.amount_origin) || 0;
+            if (amount <= 0) return;
+            totalSpend += amount;
+            totalTxns++;
+
+            var month = t.posted_at_utc ? t.posted_at_utc.substring(0, 7) : 'Sin fecha';
+            byMonth[month] = (byMonth[month] || 0) + amount;
+
+            if (t.po_id || t.po_name) {
+                var poKey = t.po_id || 'sin-po';
+                var po = S.projects.filter(function (p) { return p.id === t.po_id; })[0];
+                var poName = po ? po.nombre : (t.po_id || 'Sin PO');
+                if (!byPO[poKey]) byPO[poKey] = { name: poName, total: 0 };
+                byPO[poKey].total += amount;
+            }
+
+            if (t.user_email) {
+                if (!byPerson[t.user_email]) byPerson[t.user_email] = { name: t.user_name || t.user_email, total: 0, count: 0 };
+                byPerson[t.user_email].total += amount;
+                byPerson[t.user_email].count++;
+            }
+
+            if (t.expense_type) {
+                byExpType[t.expense_type] = (byExpType[t.expense_type] || 0) + amount;
+            } else {
+                byExpType['Sin clasificar'] = (byExpType['Sin clasificar'] || 0) + amount;
+            }
+
+            if (t.jeeves_category) {
+                if (!byJeevCat[t.jeeves_category]) byJeevCat[t.jeeves_category] = { total: 0, count: 0 };
+                byJeevCat[t.jeeves_category].total += amount;
+                byJeevCat[t.jeeves_category].count++;
+            }
+        });
+
+        return { byMonth: byMonth, byPO: byPO, byPerson: byPerson, byExpenseType: byExpType, byJeevesCategory: byJeevCat, totalSpend: totalSpend, totalTxns: totalTxns };
+    }
+
+    function renderDashStats(data) {
+        var el = document.getElementById('dashTotalSpend');
+        if (el) el.textContent = fmtMoney(data.totalSpend);
+        var el2 = document.getElementById('dashTotalTxns');
+        if (el2) el2.textContent = data.totalTxns + ' transacciones';
+
+        var catCount = Object.keys(data.byExpenseType).filter(function (k) { return k !== 'Sin clasificar'; }).length;
+        var el3 = document.getElementById('dashCategories');
+        if (el3) el3.textContent = catCount + ' categorias';
+
+        var el4 = document.getElementById('dashPOs');
+        if (el4) el4.textContent = Object.keys(data.byPO).length + ' POs';
+    }
+
+    function renderMonthlyChart(byMonth) {
+        var months = Object.keys(byMonth).sort();
+        // Show last 12 months max
+        if (months.length > 12) months = months.slice(months.length - 12);
+        var values = months.map(function (m) { return byMonth[m] || 0; });
+
+        var ctx = document.getElementById('chartMonthly');
+        if (!ctx) return;
+        if (_chartInstances.monthly) _chartInstances.monthly.destroy();
+
+        _chartInstances.monthly = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: months.map(function (m) { return monthLabel(m); }),
+                datasets: [{
+                    label: 'Gasto mensual (MXN)',
+                    data: values,
+                    backgroundColor: 'rgba(8,145,178,0.15)',
+                    borderColor: '#0891b2',
+                    borderWidth: 2,
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return ' ' + fmtMoney(c.parsed.y); } } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                    y: { grid: { color: '#f1f5f9' }, ticks: { callback: function (v) { return '$' + Math.round(v / 1000) + 'k'; }, font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    function renderExpenseTypeChart(byExpType) {
+        var keys = Object.keys(byExpType);
+        if (!keys.length) return;
+        keys.sort(function (a, b) { return byExpType[b] - byExpType[a]; });
+
+        var palette = ['#0891b2', '#0d9488', '#0284c7', '#7c3aed', '#db2777', '#d97706', '#059669', '#dc2626', '#64748b'];
+        var ctx = document.getElementById('chartExpType');
+        if (!ctx) return;
+        if (_chartInstances.expType) _chartInstances.expType.destroy();
+
+        _chartInstances.expType = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: keys.map(function (k) { return k.length > 18 ? k.substring(0, 18) + '...' : k; }),
+                datasets: [{
+                    data: keys.map(function (k) { return byExpType[k]; }),
+                    backgroundColor: palette.slice(0, keys.length),
+                    borderWidth: 2, borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } },
+                    tooltip: { callbacks: { label: function (c) { return ' ' + c.label + ': ' + fmtMoney(c.parsed); } } }
+                }
+            }
+        });
+    }
+
+    function renderPersonTable(byPerson) {
+        var el = document.getElementById('dashPersonTable');
+        if (!el) return;
+        var sorted = Object.keys(byPerson).sort(function (a, b) { return byPerson[b].total - byPerson[a].total; });
+        if (!sorted.length) { el.innerHTML = '<tr><td colspan="3" style="color:var(--tx3);padding:12px">Sin datos</td></tr>'; return; }
+        var maxVal = byPerson[sorted[0]].total;
+        var html = '';
+        sorted.slice(0, 10).forEach(function (email, idx) {
+            var p = byPerson[email];
+            var pct = maxVal > 0 ? Math.round(p.total / maxVal * 100) : 0;
+            html += '<tr><td>' + (idx + 1) + '</td>' +
+                '<td><div>' + esc(p.name) + '</div>' +
+                '<div class="rank-bar-wrap"><div class="rank-bar" style="width:' + pct + '%"></div></div></td>' +
+                '<td>' + fmtMoney(p.total) + '<br><span style="font-size:.68rem;color:var(--tx3)">' + p.count + ' txns</span></td></tr>';
+        });
+        el.innerHTML = html;
+    }
+
+    function renderPOTable(byPO) {
+        var el = document.getElementById('dashPOTable');
+        if (!el) return;
+        var keys = Object.keys(byPO).sort(function (a, b) { return byPO[b].total - byPO[a].total; });
+        if (!keys.length) { el.innerHTML = '<tr><td colspan="2" style="color:var(--tx3);padding:12px">Sin POs asignadas</td></tr>'; return; }
+        var maxVal = byPO[keys[0]].total;
+        var html = '';
+        keys.slice(0, 10).forEach(function (k, idx) {
+            var po = byPO[k];
+            var pct = maxVal > 0 ? Math.round(po.total / maxVal * 100) : 0;
+            html += '<tr><td><div>' + esc(po.name) + '</div>' +
+                '<div class="rank-bar-wrap"><div class="rank-bar" style="width:' + pct + '%"></div></div></td>' +
+                '<td>' + fmtMoney(po.total) + '</td></tr>';
+        });
+        el.innerHTML = html;
+    }
+
+    function renderJeevesCatTable(byJeevCat) {
+        var el = document.getElementById('dashJeevesTable');
+        if (!el) return;
+        var keys = Object.keys(byJeevCat).sort(function (a, b) { return byJeevCat[b].total - byJeevCat[a].total; });
+        if (!keys.length) { el.innerHTML = '<tr><td colspan="3" style="color:var(--tx3);padding:12px">Sin datos</td></tr>'; return; }
+        var html = '';
+        var now = new Date().toISOString().substring(0, 7);
+        keys.slice(0, 15).forEach(function (cat) {
+            var d = byJeevCat[cat];
+            var limit = S.limitMap[cat];
+            var spent = (getMonthlySpend())[now + '|' + cat] || 0;
+            var over = limit && spent > limit;
+            var limitCell = limit ? fmtMoney(limit) : '<span style="color:var(--tx3)">--</span>';
+            html += '<tr' + (over ? ' class="over-limit-row"' : '') + '>' +
+                '<td>' + esc(cat) + (over ? '<span class="limit-warn-tag">LIMITE</span>' : '') + '</td>' +
+                '<td>' + fmtMoney(d.total) + '</td>' +
+                '<td>' + limitCell + '</td></tr>';
+        });
+        el.innerHTML = html;
+    }
+
+    function monthLabel(yyyymm) {
+        var parts = yyyymm.split('-');
+        if (parts.length < 2) return yyyymm;
+        var months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        return months[parseInt(parts[1], 10) - 1] + ' ' + parts[0].substring(2);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var dFrom = document.getElementById('dFrom');
+        var dTo = document.getElementById('dTo');
+        var dUser = document.getElementById('dUser');
+        if (dFrom) dFrom.addEventListener('change', function () { if (S.activeTab === 'dashboard') renderDashboard(); });
+        if (dTo) dTo.addEventListener('change', function () { if (S.activeTab === 'dashboard') renderDashboard(); });
+        if (dUser) dUser.addEventListener('change', function () { if (S.activeTab === 'dashboard') renderDashboard(); });
+    });
+</script>
