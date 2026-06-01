@@ -47,6 +47,7 @@ db.exec(`
     factura_uuid TEXT,
     rfc_emisor TEXT,
     rfc_receptor TEXT,
+    needs_validation INTEGER DEFAULT 0,
     updated_at TEXT,
     updated_by TEXT
   );

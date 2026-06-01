@@ -200,16 +200,41 @@ export default function Dashboard({ data }) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '24px' }}>
         <div className="card" style={{ background: '#fff', padding: '20px', borderRadius: '12px' }}>
           <h3>Categorización Inteligente</h3>
-          <div style={{ maxWidth: '300px', margin: '0 auto' }}>
-            <Doughnut data={smartData} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ maxWidth: '250px', flex: 1 }}>
+              <Doughnut data={smartData} options={{ plugins: { legend: { display: false } } }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <table style={{ width: '100%', fontSize: '12px' }}>
+                <tbody>
+                  {Object.entries(stats.bySmartCategory)
+                    .sort((a,b) => b[1] - a[1])
+                    .map(([cat, amount]) => (
+                      <tr key={cat}>
+                        <td style={{ padding: '4px 0' }}>{cat}</td>
+                        <td style={{ padding: '8px', fontWeight: 'bold' }}>${amount.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           </div>
           <div style={{ marginTop: '15px', fontSize: '12px', color: '#64748b' }}>
-            * Comida, Digital, Transporte, Viajes y Otros.
+            * Categorías automáticas basadas en el comercio y tipo de gasto.
           </div>
         </div>
+        
         <div className="card" style={{ background: '#fff', padding: '20px', borderRadius: '12px' }}>
           <h3>Gasto por PO</h3>
-          <Bar data={poData} options={{ indexAxis: 'y' }} />
+          <div style={{ height: '400px' }}>
+            <Bar data={poData} options={{ 
+              indexAxis: 'y', 
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false }
+              }
+            }} />
+          </div>
         </div>
       </div>
 

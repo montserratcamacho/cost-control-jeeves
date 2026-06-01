@@ -92,14 +92,22 @@ const INTERNAL_CATEGORIES = [
   'Capex'
 ];
 
+const VALIDATION_STATUS = {
+  0: { label: 'Validado', color: '#10b981' },
+  1: { label: 'Pendiente Validación', color: '#f59e0b' }
+};
+
 export default function Transactions({ data }) {
   const [transactions, setTransactions] = useState(data?.transactions || []);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [loadingHistorical, setLoadingHistorical] = useState(false);
   const [filterName, setFilterName] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterPo, setFilterPo] = useState(null);
   const [filterDateStart, setFilterDateStart] = useState('');
   const [filterDateEnd, setFilterDateEnd] = useState('');
+  const [filterValidation, setFilterValidation] = useState('');
   
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,11 +129,74 @@ export default function Transactions({ data }) {
       });
       if (response.ok) {
         setTransactions(prev => prev.map(txn => 
-          txn.unique_id === id ? { ...txn, [field]: value } : txn
+          txn.unique_id === id ? { ...txn, [field]: value, needs_validation: field === 'needs_validation' ? value : txn.needs_validation } : txn
         ));
       }
     } catch (error) {
       console.error('Error updating:', error);
+    }
+  };
+
+  const handleAcceptSelected = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    
+    if (!confirm(`¿Estás seguro de marcar ${ids.length} transacciones como validadas?`)) return;
+
+    try {
+      for (const id of ids) {
+        await fetch(`http://localhost:3001/api/transactions/${id}/update`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ field: 'needs_validation', value: 0, updated_by: data?.userEmail })
+        });
+      }
+      
+      setTransactions(prev => prev.map(txn => 
+        selectedIds.has(txn.unique_id) ? { ...txn, needs_validation: 0 } : txn
+      ));
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error('Error accepting selected:', error);
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (currentRows) => {
+    if (selectedIds.size === currentRows.length && currentRows.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(currentRows.map(r => r.unique_id)));
+    }
+  };
+
+  const handleImportHistorical = async () => {
+    if (!confirm('¿Deseas iniciar la conciliación con archivos históricos de Excel? Esto puede tardar unos segundos.')) return;
+    
+    setLoadingHistorical(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/import-historical', { method: 'POST' });
+      const result = await response.json();
+      if (result.success) {
+        alert(result.message);
+        // Recargar datos
+        window.location.reload();
+      } else {
+        alert('Error: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error importing:', error);
+      alert('Error de conexión con el servidor');
+    } finally {
+      setLoadingHistorical(false);
     }
   };
 
@@ -163,14 +234,16 @@ export default function Transactions({ data }) {
       const date = txn.created_at_utc?.substring(0, 10) || "";
       const matchesSearch = 
         txn.payee?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        txn.payment_description?.toLowerCase().includes(searchTerm.toLowerCase());
+        txn.payment_description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        txn.user_name?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesName = !filterName || txn.user_name === filterName;
       const matchesCategory = !filterCategory || txn.jeeves_category === filterCategory;
       const matchesPo = !filterPo || txn.po_id === filterPo.value;
       const matchesDateStart = !filterDateStart || date >= filterDateStart;
       const matchesDateEnd = !filterDateEnd || date <= filterDateEnd;
+      const matchesValidation = filterValidation === '' || txn.needs_validation === parseInt(filterValidation);
       
-      return matchesSearch && matchesName && matchesCategory && matchesPo && matchesDateStart && matchesDateEnd;
+      return matchesSearch && matchesName && matchesCategory && matchesPo && matchesDateStart && matchesDateEnd && matchesValidation;
     });
 
     // Sort POs by ID in descending order
@@ -183,7 +256,7 @@ export default function Transactions({ data }) {
       return poB - poA; // Sort descending
     });
     return currentTransactions;
-  }, [transactions, searchTerm, filterName, filterCategory, filterPo, filterDateStart, filterDateEnd]);
+  }, [transactions, searchTerm, filterName, filterCategory, filterPo, filterDateStart, filterDateEnd, filterValidation]);
 
   // Cálculo de Paginación
   const totalPages = Math.ceil(filteredTransactions.length / rowsPerPage);
@@ -217,6 +290,11 @@ export default function Transactions({ data }) {
           <option value="">Categoría Jeeves</option>
           {jeevesCategories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
+        <select value={filterValidation} onChange={(e) => {setFilterValidation(e.target.value); setCurrentPage(1);}} style={{ padding: '6px' }}>
+          <option value="">Estado Validación</option>
+          <option value="0">Validado</option>
+          <option value="1">Pendiente</option>
+        </select>
         <div style={{ minWidth: '200px' }}>
           <Select
             options={data?.projects?.map(p => ({ value: p.id, label: p.nombre })) || []}
@@ -248,6 +326,24 @@ export default function Transactions({ data }) {
             }}
           />
         </div>
+        {selectedIds.size > 0 && (
+          <button 
+            onClick={handleAcceptSelected}
+            className="btn-primary"
+            style={{ backgroundColor: '#10b981', padding: '6px 12px', fontSize: '12px' }}
+          >
+            Validar Seleccionados ({selectedIds.size})
+          </button>
+        )}
+        <button 
+          onClick={handleImportHistorical}
+          className="btn-secondary"
+          disabled={loadingHistorical}
+          style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+        >
+          <Upload size={14} />
+          {loadingHistorical ? 'Procesando...' : 'Cargar Históricos'}
+        </button>
       </div>
 
       {/* Info de resultados y Paginación Superior */}
@@ -265,7 +361,11 @@ export default function Transactions({ data }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <thead style={{ backgroundColor: '#f8fafc', position: 'sticky', top: 0, zIndex: 10 }}>
             <tr>
-              <th style={{ padding: '12px' }}>Fecha</th>
+              <th style={{ padding: '12px' }}>
+                <input type="checkbox" checked={selectedIds.size === currentRows.length && currentRows.length > 0} onChange={() => toggleSelectAll(currentRows)} />
+              </th>
+              <th>Estado</th>
+              <th>Fecha</th>
               <th>Usuario</th>
               <th>Comercio</th>
               <th>Descripción</th>
@@ -279,8 +379,25 @@ export default function Transactions({ data }) {
           </thead>
           <tbody>
             {currentRows.map(txn => (
-              <tr key={txn.unique_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '10px' }}>{txn.created_at_utc?.substring(0, 10)}</td>
+              <tr key={txn.unique_id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: txn.needs_validation ? '#fffbeb' : 'inherit' }}>
+                <td style={{ padding: '10px' }}>
+                  <input type="checkbox" checked={selectedIds.has(txn.unique_id)} onChange={() => toggleSelect(txn.unique_id)} />
+                </td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: VALIDATION_STATUS[txn.needs_validation || 0].color }}></div>
+                    {txn.needs_validation === 1 && (
+                      <button 
+                        onClick={() => handleUpdate(txn.unique_id, 'needs_validation', 0)}
+                        className="btn-secondary"
+                        style={{ fontSize: '10px', padding: '2px 4px' }}
+                      >
+                        Aceptar
+                      </button>
+                    )}
+                  </div>
+                </td>
+                <td>{txn.created_at_utc?.substring(0, 10)}</td>
                 <td style={{ fontWeight: 500 }}>{txn.user_name}</td>
                 <td>{txn.payee}</td>
                 <td title={txn.payment_description}>
@@ -293,7 +410,7 @@ export default function Transactions({ data }) {
                 <td>
                   <select 
                     className="cell-select" 
-                    defaultValue={txn.tipo_gasto_interno || ''}
+                    value={txn.tipo_gasto_interno || ''}
                     onChange={(e) => handleUpdate(txn.unique_id, 'tipo_gasto_interno', e.target.value)}
                   >
                     <option value="">-- Seleccionar --</option>

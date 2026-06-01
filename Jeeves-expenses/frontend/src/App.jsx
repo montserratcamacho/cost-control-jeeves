@@ -11,6 +11,7 @@ import './index.css';
 function App() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const fetchData = (shouldSync = false) => {
     fetch('http://localhost:3001/api/init')
@@ -19,7 +20,8 @@ function App() {
         setData(result);
         setLoading(false);
         
-        if (shouldSync) {
+        if (shouldSync && !isSyncing) {
+          setIsSyncing(true);
           // Iniciar sincronización en segundo plano solo si se solicita
           fetch('http://localhost:3001/api/sync-jeeves', { method: 'POST' })
             .then(res => res.json())
@@ -29,7 +31,8 @@ function App() {
                 fetchData(false); // Recargar solo los datos locales después del sync
               }
             })
-            .catch(err => console.error('Error en sincronización automática:', err));
+            .catch(err => console.error('Error en sincronización automática:', err))
+            .finally(() => setIsSyncing(false));
         }
       })
       .catch(err => {
@@ -41,15 +44,20 @@ function App() {
   useEffect(() => {
     fetchData(true); // Sincronizar al cargar la app por primera vez
 
-    // Polling cada 30 segundos para actualizaciones automáticas de la UI
+    // Polling cada 60 segundos (aumentado de 30) para actualizaciones automáticas de la UI
     const interval = setInterval(() => {
       fetchData(false);
-    }, 30000);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
   const handleSync = async () => {
+    if (isSyncing) {
+      alert("Ya hay una sincronización en curso. Por favor espera.");
+      return;
+    }
+    setIsSyncing(true);
     try {
       const response = await fetch('http://localhost:3001/api/sync-jeeves', { method: 'POST' });
       const result = await response.json();
@@ -57,10 +65,12 @@ function App() {
         alert(`Sincronización exitosa: ${result.count} procesadas (${result.totalInDb} totales en base de datos).`);
         fetchData(); // Recargar datos
       } else {
-        alert(`Error en sincronización: ${result.error}`);
+        alert(`Estado: ${result.message || result.error}`);
       }
     } catch (error) {
       alert(`Error al conectar con el servidor: ${error.message}`);
+    } finally {
+      setIsSyncing(false);
     }
   };
 

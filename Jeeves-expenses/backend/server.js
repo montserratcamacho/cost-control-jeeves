@@ -3,6 +3,7 @@ const cors = require('cors');
 const axios = require('axios');
 const db = require('./database');
 const { fetchJeevesTransactions } = require('./jeevesService');
+const { runHistoricalImport } = require('./historicalService');
 const multer = require('multer');
 const { PDFParse } = require('pdf-parse');
 const upload = multer({ storage: multer.memoryStorage() });
@@ -81,13 +82,19 @@ function categorizeTransaction(txn) {
   return txn.merchant?.merchantCategoryCodeDescription || 'Otros Gastos';
 }
 
+let isSyncing = false;
+
 async function performSync() {
+  if (isSyncing) {
+    console.log("⚠️ Sincronización ya en curso. Ignorando solicitud.");
+    return { success: false, message: "Sincronización ya en curso" };
+  }
+  isSyncing = true;
   try {
     // 1. Limpieza de transacciones de prueba
     db.prepare("DELETE FROM transactions WHERE unique_id LIKE 'txn_%'").run();
 
     console.log("🚀 Iniciando Sincronización Multi-Periodo Automática (2024-2026)...");
-    const rawTransactions = await fetchJeevesTransactions();
     
     const insertStmt = db.prepare(`
       INSERT INTO transactions (
@@ -105,46 +112,50 @@ async function performSync() {
         jeeves_category = excluded.jeeves_category
     `);
 
-    const syncDb = db.transaction((txns) => {
-      for (const txn of txns) {
-        const userName = parseUserName(txn);
-        const amount = txn.transactionCurrency === 'MXN' ? txn.transactionAmount : (txn.localAmount || txn.transactionAmount);
-        const payee = (txn.merchant?.name || txn.vendor?.name || 'Comercio').trim();
-        const desc = (txn.merchant?.name || txn.vendor?.name || txn.paymentPurpose || 'Gasto').trim();
-        const category = categorizeTransaction(txn);
-        
-        // Extraer información de SAT/Factura si existe en el objeto de Jeeves
-        const satUuid = txn.receipt?.taxId || txn.receipt?.uuid || null;
-        const receiptUrl = txn.receipt?.url || null;
-        const receiptName = txn.receipt?.filename || (receiptUrl ? 'Factura_Jeeves.pdf' : null);
+    const updateReceiptStmt = db.prepare(`
+      UPDATE transactions SET 
+        sat_uuid = COALESCE(sat_uuid, ?),
+        archivo_factura_url = COALESCE(archivo_factura_url, ?),
+        archivo_factura_nombre = COALESCE(archivo_factura_nombre, ?)
+      WHERE unique_id = ?
+    `);
 
-        insertStmt.run(
-          txn.id,
-          txn.transactionDate || new Date().toISOString(),
-          userName,
-          txn.user?.email || '',
-          payee,
-          desc,
-          amount,
-          'MXN',
-          category
-        );
+    const processBatch = (txns, source) => {
+      db.transaction(() => {
+        for (const txn of txns) {
+          const userName = parseUserName(txn);
+          const amount = txn.transactionCurrency === 'MXN' ? txn.transactionAmount : (txn.localAmount || txn.transactionAmount);
+          const payee = (txn.merchant?.name || txn.vendor?.name || 'Comercio').trim();
+          const desc = (txn.merchant?.name || txn.vendor?.name || txn.paymentPurpose || 'Gasto').trim();
+          const category = categorizeTransaction(txn);
+          
+          const satUuid = txn.receipt?.taxId || txn.receipt?.uuid || null;
+          const receiptUrl = txn.receipt?.url || null;
+          const receiptName = txn.receipt?.filename || (receiptUrl ? 'Factura_Jeeves.pdf' : null);
 
-        // Si hay factura en Jeeves, actualizar los campos correspondientes sin borrar lo demás
-        if (satUuid || receiptUrl) {
-          const updateReceiptStmt = db.prepare(`
-            UPDATE transactions SET 
-              sat_uuid = COALESCE(sat_uuid, ?),
-              archivo_factura_url = COALESCE(archivo_factura_url, ?),
-              archivo_factura_nombre = COALESCE(archivo_factura_nombre, ?)
-            WHERE unique_id = ?
-          `);
-          updateReceiptStmt.run(satUuid, receiptUrl, receiptName, txn.id);
+          // Usar el ID original de Jeeves para evitar duplicados si se consulta desde distintos endpoints
+          const uniqueId = txn.id;
+
+          insertStmt.run(
+            uniqueId,
+            txn.transactionDate || new Date().toISOString(),
+            userName,
+            txn.user?.email || '',
+            payee,
+            desc,
+            amount,
+            'MXN',
+            category
+          );
+
+          if (satUuid || receiptUrl) {
+            updateReceiptStmt.run(satUuid, receiptUrl, receiptName, uniqueId);
+          }
         }
-      }
-    });
+      })();
+    };
 
-    syncDb(rawTransactions);
+    const rawTransactions = await fetchJeevesTransactions(processBatch);
     
     const totalCount = db.prepare("SELECT COUNT(*) as count FROM transactions WHERE unique_id NOT LIKE 'txn_%'").get().count;
     console.log(`✅ Sincronización automática terminada. Total en DB: ${totalCount}`);
@@ -152,6 +163,8 @@ async function performSync() {
   } catch (error) {
     console.error('❌ Error en sincronización automática:', error);
     throw error;
+  } finally {
+    isSyncing = false;
   }
 }
 
@@ -165,6 +178,20 @@ app.post('/api/sync-jeeves', async (req, res) => {
       message: `Se procesaron ${result.count} transacciones de los periodos 2024, 2025 y 2026.`
     });
   } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/import-historical', async (req, res) => {
+  try {
+    const stats = await runHistoricalImport(db);
+    res.json({ 
+      success: true, 
+      ...stats,
+      message: `Importación finalizada: ${stats.updatedCount} exactos, ${stats.aiMatchedCount} por IA, ${stats.pendingCount} pendientes.`
+    });
+  } catch (error) {
+    console.error('Error en importación histórica:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -272,17 +299,20 @@ app.get('/api/purchase-orders', async (req, res) => {
         }));
     }
 
-    // Fetch budgets from local database
+    // Fetch budgets and actual spend from local database
     const budgets = db.prepare('SELECT po_id, budget_indirectos, status FROM project_budgets').all();
+    const spend = db.prepare('SELECT po_id, SUM(amount_destination) as total FROM transactions WHERE po_id IS NOT NULL GROUP BY po_id').all();
+    
     const budgetMap = new Map(budgets.map(b => [b.po_id, b]));
+    const spendMap = new Map(spend.map(s => [s.po_id, s.total]));
 
-    // Merge Apolo POs with local budget data
+    // Merge Apolo POs with local budget data and actual spend
     const projectsWithBudgets = apoloProjects.map(project => ({
       ...project,
       budget_indirectos: budgetMap.get(project.id)?.budget_indirectos || 0,
       budget_status: budgetMap.get(project.id)?.status || 'pending',
       monto_po: 0, // Placeholder as per requirement
-      budget_gastado: 0 // Placeholder as per requirement
+      budget_gastado: spendMap.get(project.id) || 0
     }));
 
     res.json({ success: true, projects: projectsWithBudgets });

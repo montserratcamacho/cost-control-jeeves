@@ -34,9 +34,14 @@ async function fetchWithRetry(url, tokenProvider, retries = 3) {
       return fetchWithRetry(url, tokenProvider, retries);
     }
     if (err.response?.status === 429) {
-      console.log("⚠️ 429 - Esperando 15s...");
-      await sleep(15000);
-      return fetchWithRetry(url, tokenProvider, retries);
+      const retryAfter = parseInt(err.response.headers['retry-after']) || 30;
+      const waitTime = retryAfter * 1000 + 5000; // Agregar 5s de margen
+      console.log(`⚠️ 429 - Too Many Requests. Cloudflare solicita esperar ${retryAfter}s. Esperando ${waitTime/1000}s... (${retries} reintentos restantes)`);
+      await sleep(waitTime);
+      if (retries > 0) {
+        return fetchWithRetry(url, tokenProvider, retries - 1);
+      }
+      return { data: { data: [] } };
     }
     
     // Reintentar en errores de red (ECONNRESET, ETIMEDOUT, etc.)
@@ -55,7 +60,7 @@ async function fetchWithRetry(url, tokenProvider, retries = 3) {
   }
 }
 
-async function fetchJeevesTransactions() {
+async function fetchJeevesTransactions(onBatch) {
   let currentToken = await getJeevesToken();
   const tokenProvider = {
     getToken: async () => currentToken,
@@ -71,16 +76,15 @@ async function fetchJeevesTransactions() {
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
   const currentYear = today.getFullYear();
+  const startYear = 2022; // Asegurar que cubrimos todo desde el inicio
 
-  // Generar lista de meses desde Enero 2024 hasta el mes actual
   const months = [];
-  for (let y = 2024; y <= currentYear; y++) {
-    const startMonth = (y === 2024) ? 1 : 1;
-    const endMonth = (y === currentYear) ? currentMonth : 12;
-    for (let m = startMonth; m <= endMonth; m++) {
+  for (let y = startYear; y <= currentYear; y++) {
+    const endM = (y === currentYear) ? currentMonth : 12;
+    for (let m = 1; m <= endM; m++) {
       const monthStr = m < 10 ? `0${m}` : `${m}`;
-      const isCurrentMonth = (y === currentYear && m === currentMonth);
-      const lastDay = isCurrentMonth ? today.getDate() : new Date(y, m, 0).getDate();
+      const endOfMonth = new Date(y, m, 0);
+      const lastDay = (y === currentYear && m === currentMonth) ? today.getDate() : endOfMonth.getDate();
       const lastDayStr = lastDay < 10 ? `0${lastDay}` : `${lastDay}`;
 
       months.push({
@@ -94,27 +98,44 @@ async function fetchJeevesTransactions() {
 
   for (const month of months) {
     for (const endpoint of endpoints) {
-      let nextCursor = null;
-      console.log(`📅 Escaneando ${endpoint} - ${month.start} a ${month.end}...`);
-
-      do {
-        let url = `https://public-api.jeev.es${endpoint}?pageSize=100&startDate=${month.start}&endDate=${month.end}`;
-        if (nextCursor) url += `&pageCursor=${nextCursor}`;
-
-        const response = await fetchWithRetry(url, tokenProvider);
-        const items = response.data.data || [];
+      try {
+        let nextCursor = null;
+        const source = endpoint.includes('cards') ? 'card' : 'payment';
         
-        if (items.length > 0) {
-          masterList = masterList.concat(items);
-          console.log(`   ✅ Cargados ${items.length} de este bloque (Total acumulado: ${masterList.length})`);
+        // Para el mes actual, extendemos el endDate al día de hoy
+        let endDate = month.end;
+        const todayStr = today.toISOString().split('T')[0];
+        if (month.end === todayStr || month.start.substring(0, 7) === todayStr.substring(0, 7)) {
+          // No sumamos +1 día para evitar el error 400 del API de Jeeves
+          endDate = todayStr;
         }
 
-        nextCursor = response.data.pagination?.nextCursor;
-        if (nextCursor) await sleep(1500);
-      } while (nextCursor);
-      await sleep(3000); // Add a delay after each endpoint for a given month
+        console.log(`📅 Escaneando ${endpoint} - ${month.start} a ${endDate}...`);
+
+        do {
+          let url = `https://public-api.jeev.es${endpoint}?pageSize=100&startDate=${month.start}&endDate=${endDate}`;
+          if (nextCursor) url += `&pageCursor=${nextCursor}`;
+
+          const response = await fetchWithRetry(url, tokenProvider);
+          const items = response.data.data || [];
+          
+          if (items.length > 0) {
+            console.log(`   🔍 IDs: ${items.slice(0, 2).map(i => i.id).join(', ')}...`);
+            if (onBatch) await onBatch(items, source);
+            masterList = masterList.concat(items);
+            console.log(`   ✅ Cargados ${items.length} de este bloque (Total acumulado: ${masterList.length})`);
+          }
+
+          nextCursor = response.data.pagination?.nextCursor;
+          if (nextCursor) await sleep(2000); 
+        } while (nextCursor);
+        await sleep(1500);
+      } catch (error) {
+        console.error(`❌ Error en mes ${month.start} endpoint ${endpoint}:`, error.message);
+        continue;
+      }
     }
-    await sleep(3000); // Add a delay after each month's iteration
+    await sleep(1500);
   }
 
   return masterList;
