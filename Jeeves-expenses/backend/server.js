@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const path = require('path');
 const db = require('./database');
 const { fetchJeevesTransactions } = require('./jeevesService');
 const { runHistoricalImport } = require('./historicalService');
@@ -12,6 +13,18 @@ require('dotenv').config();
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'uploads/receipts/'))
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+});
+const uploadDisk = multer({ storage: storage });
 
 function parseUserName(txn) {
   if (!txn) return 'Usuario Desconocido';
@@ -236,27 +249,30 @@ app.get('/api/init', async (req, res) => {
         timeout: 10000 // 10 segundos timeout
       });
 
-      if (response.data?.data?.purchaseOrders?.data) {
-        projects = response.data.data.purchaseOrders.data
-          .filter(po => !po.cancelledAt)
-          .map(po => ({
-            id: po.id.toString(),
-            nombre: `${po.id} - ${po.name}`
-          }));
-        
-        // Guardar en DB local para persistencia y fallback
-        const insertProject = db.prepare('INSERT OR REPLACE INTO projects (id, nombre, created_at) VALUES (?, ?, ?)');
-        const deleteOld = db.prepare('DELETE FROM projects');
-        
-        db.transaction((projs) => {
-          deleteOld.run();
-          for (const p of projs) {
-            insertProject.run(p.id, p.nombre, new Date().toISOString());
-          }
-        })(projects);
-        
-        console.log(`✅ ${projects.length} POs sincronizadas.`);
-      }
+    if (response.data?.data?.purchaseOrders?.data && response.data.data.purchaseOrders.data.length > 0) {
+      projects = response.data.data.purchaseOrders.data
+        .filter(po => !po.cancelledAt)
+        .map(po => ({
+          id: po.id.toString(),
+          nombre: `${po.id} - ${po.name}`
+        }));
+      
+      // Guardar en DB local para persistencia y fallback
+      const insertProject = db.prepare('INSERT OR REPLACE INTO projects (id, nombre, created_at) VALUES (?, ?, ?)');
+      const deleteOld = db.prepare('DELETE FROM projects');
+      
+      db.transaction((projs) => {
+        deleteOld.run();
+        for (const p of projs) {
+          insertProject.run(p.id, p.nombre, new Date().toISOString());
+        }
+      })(projects);
+      
+      console.log(`✅ ${projects.length} POs sincronizadas.`);
+    } else {
+      console.log("⚠️ Apolo devolvió datos vacíos, usando caché local");
+      projects = db.prepare('SELECT * FROM projects').all();
+    }
     }
   } catch (error) {
     console.error("❌ Error con Apolo:", error.message);
@@ -267,6 +283,7 @@ app.get('/api/init', async (req, res) => {
 });
 
 app.get('/api/purchase-orders', async (req, res) => {
+  let apoloProjects = [];
   try {
     const apoloQuery = `
       query PurchaseOrders {
@@ -286,19 +303,34 @@ app.get('/api/purchase-orders', async (req, res) => {
       headers: {
         'Authorization': `Bearer ${process.env.APOLO_TOKEN.trim()}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 5000
     });
 
-    let apoloProjects = [];
-    if (response.data?.data?.purchaseOrders?.data) {
+    if (response.data?.data?.purchaseOrders?.data && response.data.data.purchaseOrders.data.length > 0) {
       apoloProjects = response.data.data.purchaseOrders.data
         .filter(po => !po.cancelledAt)
         .map(po => ({
           id: po.id.toString(),
           nombre: `${po.id} - ${po.name}`
         }));
+      
+      // Actualizar caché local si recibimos datos válidos
+      const insertProject = db.prepare('INSERT OR REPLACE INTO projects (id, nombre, created_at) VALUES (?, ?, ?)');
+      db.transaction((projs) => {
+        for (const p of projs) {
+          insertProject.run(p.id, p.nombre, new Date().toISOString());
+        }
+      })(apoloProjects);
+    } else {
+      throw new Error('Apolo returned empty or invalid data');
     }
+  } catch (error) {
+    console.error("❌ Error fetching POs from Apolo, using local cache:", error.message);
+    apoloProjects = db.prepare('SELECT id, nombre FROM projects').all();
+  }
 
+  try {
     // Fetch budgets and actual spend from local database
     const budgets = db.prepare('SELECT po_id, budget_indirectos, status FROM project_budgets').all();
     const spend = db.prepare('SELECT po_id, SUM(amount_destination) as total FROM transactions WHERE po_id IS NOT NULL GROUP BY po_id').all();
@@ -306,18 +338,18 @@ app.get('/api/purchase-orders', async (req, res) => {
     const budgetMap = new Map(budgets.map(b => [b.po_id, b]));
     const spendMap = new Map(spend.map(s => [s.po_id, s.total]));
 
-    // Merge Apolo POs with local budget data and actual spend
+    // Merge projects with local budget data and actual spend
     const projectsWithBudgets = apoloProjects.map(project => ({
       ...project,
       budget_indirectos: budgetMap.get(project.id)?.budget_indirectos || 0,
       budget_status: budgetMap.get(project.id)?.status || 'pending',
-      monto_po: 0, // Placeholder as per requirement
+      monto_po: 0, // Placeholder
       budget_gastado: spendMap.get(project.id) || 0
     }));
 
     res.json({ success: true, projects: projectsWithBudgets });
   } catch (error) {
-    console.error("❌ Error fetching POs for projects route:", error.message);
+    console.error("❌ Error merging PO data:", error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -344,7 +376,7 @@ app.post('/api/project-budget', (req, res) => {
 
 app.get('/api/project-budgets/pending', (req, res) => {
   try {
-    const pendingBudgets = db.prepare('SELECT pb.po_id, pb.budget_indirectos, pb.status, pb.updated_at, pb.updated_by, p.nombre FROM project_budgets pb JOIN projects p ON pb.po_id = p.id WHERE pb.status = "pending"').all();
+    const pendingBudgets = db.prepare("SELECT pb.po_id, pb.budget_indirectos, pb.status, pb.updated_at, pb.updated_by, p.nombre FROM project_budgets pb JOIN projects p ON pb.po_id = p.id WHERE pb.status = 'pending'").all();
     res.json({ success: true, pendingBudgets });
   } catch (error) {
     console.error("Error fetching pending project budgets:", error.message);
@@ -419,6 +451,22 @@ app.post('/api/transactions/:id/invoice', upload.single('file'), async (req, res
     }
   } catch (error) {
     console.error('❌ Error procesando factura:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/transactions/:id/receipt-photo', uploadDisk.single('photo'), (req, res) => {
+  const { id } = req.params;
+  if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+
+  const photoUrl = `http://localhost:3001/uploads/receipts/${req.file.filename}`;
+  
+  try {
+    const stmt = db.prepare('UPDATE transactions SET archivo_factura_url = ?, archivo_factura_nombre = ?, updated_at = ? WHERE unique_id = ?');
+    stmt.run(photoUrl, req.file.originalname, new Date().toISOString(), id);
+    res.json({ success: true, url: photoUrl });
+  } catch (error) {
+    console.error("Error saving receipt photo:", error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });

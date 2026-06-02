@@ -1,10 +1,83 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { FileText, CheckCircle, Upload, X } from 'lucide-react';
+import { FileText, CheckCircle, Upload, X, Image as ImageIcon, Eye } from 'lucide-react';
 import Select from 'react-select';
 
 const formatMoney = (amount) => {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(amount);
 };
+
+// Componente Modal para Recibos (Fotos)
+function ReceiptPhotoModal({ txn, onClose, onUpload }) {
+  const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef();
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setLoading(true);
+    
+    const formData = new FormData();
+    formData.append('photo', file);
+
+    try {
+      const response = await fetch(`http://localhost:3001/api/transactions/${txn.unique_id}/receipt-photo`, {
+        method: 'POST',
+        body: formData
+      });
+      const result = await response.json();
+      if (result.success) {
+        onUpload(txn.unique_id, result.url, file.name);
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+      justifyContent: 'center', alignItems: 'center', zIndex: 1000
+    }}>
+      <div className="modal-content" style={{
+        backgroundColor: '#fff', padding: '24px', borderRadius: '12px',
+        width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <h3 style={{ margin: 0 }}>Subir Foto de Recibo</h3>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><X size={20} /></button>
+        </div>
+        
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          {txn.archivo_factura_url && txn.archivo_factura_url.includes('/uploads/receipts/') ? (
+            <div style={{ marginBottom: '20px' }}>
+              <img src={txn.archivo_factura_url} alt="Recibo" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+              <p style={{ fontSize: '12px', color: '#64748b', marginTop: '8px' }}>{txn.archivo_factura_nombre}</p>
+            </div>
+          ) : (
+            <div style={{ marginBottom: '20px', color: '#94a3b8' }}>
+              <ImageIcon size={48} style={{ margin: '0 auto' }} />
+              <p>No hay foto cargada</p>
+            </div>
+          )}
+
+          <button 
+            className="btn-primary" 
+            onClick={() => fileInputRef.current.click()}
+            disabled={loading}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', width: '100%' }}
+          >
+            <Upload size={18} /> {loading ? 'Subiendo...' : 'Seleccionar Foto'}
+          </button>
+          <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleFileChange} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Componente Modal para Facturas
 function InvoiceModal({ txn, onClose, onUpload }) {
@@ -112,6 +185,7 @@ export default function Transactions({ data }) {
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedTxn, setSelectedTxn] = useState(null);
+  const [selectedPhotoTxn, setSelectedPhotoTxn] = useState(null);
   const rowsPerPage = 50;
 
   useEffect(() => {
@@ -119,6 +193,12 @@ export default function Transactions({ data }) {
       setTransactions(data.transactions);
     }
   }, [data]);
+
+  const handlePhotoUpload = (id, url, name) => {
+    setTransactions(prev => prev.map(txn => 
+      txn.unique_id === id ? { ...txn, archivo_factura_url: url, archivo_factura_nombre: name } : txn
+    ));
+  };
 
   const handleUpdate = async (id, field, value) => {
     try {
@@ -373,6 +453,7 @@ export default function Transactions({ data }) {
               <th>Categoría Jeeves</th>
               <th style={{ minWidth: '130px' }}>Tipo Gasto</th>
               <th>Descripción Interna</th>
+              <th>Foto Recibo</th>
               <th>Factura (UUID)</th>
               <th>PO</th>
             </tr>
@@ -425,6 +506,21 @@ export default function Transactions({ data }) {
                     onBlur={(e) => handleUpdate(txn.unique_id, 'descripcion_interna', e.target.value)}
                     placeholder="..."
                   />
+                </td>
+                <td>
+                  <button 
+                    onClick={() => setSelectedPhotoTxn(txn)}
+                    style={{ 
+                      display: 'flex', alignItems: 'center', gap: '4px', 
+                      padding: '4px 8px', borderRadius: '4px', border: '1px solid #e2e8f0',
+                      backgroundColor: txn.archivo_factura_url?.includes('/uploads/receipts/') ? '#eff6ff' : '#fff',
+                      color: txn.archivo_factura_url?.includes('/uploads/receipts/') ? '#3b82f6' : '#64748b',
+                      cursor: 'pointer', fontSize: '11px'
+                    }}
+                  >
+                    {txn.archivo_factura_url?.includes('/uploads/receipts/') ? <Eye size={14} /> : <ImageIcon size={14} />}
+                    {txn.archivo_factura_url?.includes('/uploads/receipts/') ? 'Ver Foto' : 'Subir Foto'}
+                  </button>
                 </td>
                 <td>
                   {txn.factura_uuid ? (
@@ -489,6 +585,14 @@ export default function Transactions({ data }) {
           txn={selectedTxn} 
           onClose={() => setSelectedTxn(null)} 
           onUpload={handleInvoiceUpload} 
+        />
+      )}
+
+      {selectedPhotoTxn && (
+        <ReceiptPhotoModal 
+          txn={selectedPhotoTxn} 
+          onClose={() => setSelectedPhotoTxn(null)} 
+          onUpload={handlePhotoUpload} 
         />
       )}
     </div>

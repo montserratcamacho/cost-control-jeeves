@@ -7,14 +7,18 @@ export default function Projects() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filterPO, setFilterPO] = useState(null);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchData = () => {
+    setLoading(true);
     fetch('http://localhost:3001/api/purchase-orders')
       .then(res => {
         if (!res.ok) throw new Error('Network response was not ok');
         return res.json();
       })
       .then(result => {
+        console.log('📦 Proyectos recibidos:', result.projects?.length || 0);
         if (result.success && result.projects) {
           setPurchaseOrders(result.projects || []);
         } else {
@@ -66,41 +70,52 @@ export default function Projects() {
     return currentPOs;
   }, [purchaseOrders, filterPO]);
 
+  const totalPages = Math.ceil(filteredAndSortedPOs.length / rowsPerPage);
+  const currentRows = filteredAndSortedPOs.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
   return (
     <div className="page-container" style={{ padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h1 className="page-title">Control de Presupuestos por PO</h1>
         
-        <div className="filter-bar" style={{ background: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', minWidth: '300px' }}>
-          <Select
-            options={purchaseOrders.map(po => ({ value: po.id, label: po.nombre }))}
-            onChange={setFilterPO}
-            value={filterPO}
-            placeholder="Buscar PO..."
-            isClearable
-            isSearchable
-            styles={{
-              control: (base) => ({
-                ...base,
-                minHeight: '32px',
-                height: '32px',
-                fontSize: '0.875rem',
-              }),
-              valueContainer: (base) => ({
-                ...base,
-                height: '30px',
-                padding: '0 8px',
-              }),
-              input: (base) => ({
-                ...base,
-                margin: '0px',
-              }),
-              indicatorsContainer: (base) => ({
-                ...base,
-                height: '30px',
-              }),
-            }}
-          />
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div className="filter-bar" style={{ background: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', minWidth: '300px' }}>
+            <Select
+              options={purchaseOrders.map(po => ({ value: po.id, label: po.nombre }))}
+              onChange={(opt) => { setFilterPO(opt); setCurrentPage(1); }}
+              value={filterPO}
+              placeholder="Buscar PO..."
+              isClearable
+              isSearchable
+              styles={{
+                control: (base) => ({
+                  ...base,
+                  minHeight: '32px',
+                  height: '32px',
+                  fontSize: '0.875rem',
+                }),
+                valueContainer: (base) => ({
+                  ...base,
+                  height: '30px',
+                  padding: '0 8px',
+                }),
+                input: (base) => ({
+                  ...base,
+                  margin: '0px',
+                }),
+                indicatorsContainer: (base) => ({
+                  ...base,
+                  height: '30px',
+                }),
+              }}
+            />
+          </div>
+          
+          <div style={{ display: 'flex', gap: '5px' }}>
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="btn-pagination">Anterior</button>
+            <span style={{ padding: '5px 10px', fontSize: '14px', background: 'white', borderRadius: '4px' }}>{currentPage} / {totalPages || 1}</span>
+            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)} className="btn-pagination">Siguiente</button>
+          </div>
         </div>
       </div>
 
@@ -120,7 +135,10 @@ export default function Projects() {
             {loading && (
               <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center' }}>Cargando proyectos...</td></tr>
             )}
-            {!loading && filteredAndSortedPOs.map(po => {
+            {!loading && currentRows.length === 0 && (
+              <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>No se encontraron proyectos.</td></tr>
+            )}
+            {!loading && currentRows.map(po => {
               const percent = po.budget_indirectos > 0 ? (po.budget_gastado / po.budget_indirectos) * 100 : 0;
               const isOverBudget = po.budget_indirectos > 0 && po.budget_gastado > po.budget_indirectos;
               
