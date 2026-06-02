@@ -1,33 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AlertTriangle, CheckCircle, Clock, Search, X } from 'lucide-react';
 
 export default function Limits() {
   const [pendingBudgets, setPendingBudgets] = useState([]);
+  const [allProjects, setAllProjects] = useState([]);
   const [selectedBudgets, setSelectedBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchPendingBudgets = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/api/project-budgets/pending');
-      if (!response.ok) throw new Error('Network response was not ok');
-      const result = await response.json();
-      if (result.success) {
-        setPendingBudgets(result.pendingBudgets);
-      } else {
-        setError(result.error || 'Error al cargar presupuestos pendientes');
-      }
+      const [pendingRes, allRes] = await Promise.all([
+        fetch('http://localhost:3001/api/project-budgets/pending'),
+        fetch('http://localhost:3001/api/purchase-orders')
+      ]);
+      
+      const pendingData = await pendingRes.json();
+      const allData = await allRes.json();
+
+      if (pendingData.success) setPendingBudgets(pendingData.pendingBudgets);
+      if (allData.success) setAllProjects(allData.projects);
+      
     } catch (err) {
       console.error("Fetch error:", err);
-      setError('Error al conectar con el servidor para cargar presupuestos');
+      setError('Error al conectar con el servidor');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPendingBudgets();
+    fetchData();
   }, []);
+
+  const overBudgetProjects = useMemo(() => {
+    return allProjects.filter(p => p.budget_indirectos > 0 && p.budget_gastado > p.budget_indirectos);
+  }, [allProjects]);
+
+  const filteredOverBudget = useMemo(() => {
+    return overBudgetProjects.filter(p => 
+      p.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      p.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [overBudgetProjects, searchTerm]);
 
   const handleSelectBudget = (poId) => {
     setSelectedBudgets(prev => 
@@ -45,7 +62,6 @@ export default function Limits() {
 
   const handleAuthorize = async () => {
     if (selectedBudgets.length === 0) return;
-
     try {
       setLoading(true);
       const response = await fetch('http://localhost:3001/api/project-budgets/authorize', {
@@ -53,97 +69,136 @@ export default function Limits() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ po_ids: selectedBudgets, status: 'authorized', updated_by: 'admin' }),
       });
-      if (!response.ok) throw new Error('Network response was not ok');
       const result = await response.json();
       if (result.success) {
         alert('Presupuestos autorizados exitosamente.');
         setSelectedBudgets([]);
-        fetchPendingBudgets(); // Recargar la lista
-      } else {
-        alert(`Error al autorizar: ${result.error}`);
+        fetchData();
       }
     } catch (err) {
       console.error("Authorization error:", err);
-      alert('Error al conectar con el servidor para autorizar presupuestos.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div className="loading-state">Cargando presupuestos pendientes...</div>;
-  if (error) return <div className="empty-state" style={{ color: 'var(--err)' }}>{error}</div>;
+  if (loading && pendingBudgets.length === 0) return <div style={{ padding: '40px', textAlign: 'center' }}>Cargando datos de control...</div>;
 
   return (
     <div className="page-container" style={{ padding: '20px' }}>
-      <h1 className="page-title">Autorización de Presupuestos Indirectos</h1>
+      <h1 className="page-title">Centro de Control y Límites</h1>
       
-      {pendingBudgets.length === 0 ? (
-        <div className="empty-state">No hay presupuestos pendientes de autorización.</div>
-      ) : (
-        <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-          <div style={{ marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ fontWeight: 'bold' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '20px' }}>
+        {/* Panel de Alertas */}
+        <div className="card" style={{ background: '#fff', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444' }}>
+              <AlertTriangle size={20} /> POs Excedidas ({overBudgetProjects.length})
+            </h2>
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
               <input 
-                type="checkbox" 
-                onChange={handleSelectAll} 
-                checked={selectedBudgets.length === pendingBudgets.length && pendingBudgets.length > 0}
-                style={{ marginRight: '8px' }}
+                type="text" 
+                placeholder="Filtrar..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ padding: '4px 8px 4px 28px', fontSize: '12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}
               />
-              Seleccionar Todos
-            </label>
-            <button 
-              onClick={handleAuthorize} 
-              disabled={selectedBudgets.length === 0 || loading}
-              className="btn-primary"
-              style={{ padding: '8px 16px' }}
-            >
-              Autorizar ({selectedBudgets.length})
-            </button>
+            </div>
           </div>
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-            <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9' }}>
-                <th style={{ padding: '10px' }}></th>
-                <th>ID PO</th>
-                <th>Monto Presupuesto</th>
-                <th>Solicitado Por</th>
-                <th>Fecha Solicitud</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingBudgets.map(budget => (
-                <tr key={budget.po_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '10px' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedBudgets.includes(budget.po_id)}
-                      onChange={() => handleSelectBudget(budget.po_id)}
-                    />
-                  </td>
-                  <td>{budget.po_id}</td>
-                  <td style={{ fontWeight: 'bold' }}>${parseFloat(budget.budget_indirectos).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
-                  <td>{budget.updated_by}</td>
-                  <td>{new Date(budget.updated_at).toLocaleDateString()}</td>
-                  <td>
-                    <span style={{ 
-                      padding: '4px 8px', 
-                      borderRadius: '12px', 
-                      fontSize: '0.75rem', 
-                      fontWeight: 'bold',
-                      backgroundColor: budget.status === 'authorized' ? '#dcfce7' : (budget.status === 'pending' ? '#fffbeb' : '#fee2e2'),
-                      color: budget.status === 'authorized' ? '#16a34a' : (budget.status === 'pending' ? '#f59e0b' : '#dc2626'),
-                    }}>
-                      {budget.status === 'authorized' ? 'Autorizado' : (budget.status === 'pending' ? 'Pendiente' : 'Rechazado')}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            {filteredOverBudget.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
+                No hay alertas críticas en este momento.
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead style={{ position: 'sticky', top: 0, backgroundColor: '#fff', zIndex: 1 }}>
+                  <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9' }}>
+                    <th style={{ padding: '8px' }}>PO</th>
+                    <th>Presupuesto</th>
+                    <th>Gastado</th>
+                    <th>Exceso</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOverBudget.map(p => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 8px' }}>
+                        <div style={{ fontWeight: 600 }}>{p.id}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '150px' }}>{p.nombre}</div>
+                      </td>
+                      <td>${p.budget_indirectos.toLocaleString()}</td>
+                      <td style={{ color: '#ef4444', fontWeight: 600 }}>${p.budget_gastado.toLocaleString()}</td>
+                      <td style={{ color: '#ef4444' }}>
+                        +{((p.budget_gastado / p.budget_indirectos - 1) * 100).toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
-      )}
+
+        {/* Panel de Autorizaciones */}
+        <div className="card" style={{ background: '#fff', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h2 style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b' }}>
+              <Clock size={20} /> Autorizaciones Pendientes ({pendingBudgets.length})
+            </h2>
+            {selectedBudgets.length > 0 && (
+              <button 
+                onClick={handleAuthorize} 
+                className="btn-primary"
+                style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#10b981' }}
+              >
+                Autorizar {selectedBudgets.length}
+              </button>
+            )}
+          </div>
+
+          <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            {pendingBudgets.length === 0 ? (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
+                No hay solicitudes pendientes.
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9' }}>
+                    <th style={{ padding: '8px' }}>
+                      <input type="checkbox" onChange={handleSelectAll} checked={selectedBudgets.length === pendingBudgets.length} />
+                    </th>
+                    <th>PO</th>
+                    <th>Nuevo Budget</th>
+                    <th>Solicitante</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingBudgets.map(b => (
+                    <tr key={b.po_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '12px 8px' }}>
+                        <input type="checkbox" checked={selectedBudgets.includes(b.po_id)} onChange={() => handleSelectBudget(b.po_id)} />
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{b.po_id}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>{b.nombre}</div>
+                      </td>
+                      <td style={{ fontWeight: 600 }}>${parseFloat(b.budget_indirectos).toLocaleString()}</td>
+                      <td>
+                        <div style={{ fontSize: '12px' }}>{b.updated_by}</div>
+                        <div style={{ fontSize: '10px', color: '#94a3b8' }}>{new Date(b.updated_at).toLocaleDateString()}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import Select from 'react-select';
+import { TrendingUp, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 
 export default function Projects() {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -66,107 +67,125 @@ export default function Projects() {
   }, [purchaseOrders, filterPO]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-      <div className="filter-bar">
-        <label style={{ fontSize: '.75rem', fontWeight: 600, marginRight: '8px' }}>Buscar PO:</label>
-        <Select
-          options={purchaseOrders.map(po => ({ value: po.id, label: po.nombre }))}
-          onChange={setFilterPO}
-          value={filterPO}
-          placeholder="Escribe para buscar PO..."
-          isClearable
-          isSearchable
-          styles={{
-            control: (base) => ({
-              ...base,
-              minHeight: '32px',
-              height: '32px',
-              fontSize: '0.875rem',
-            }),
-            valueContainer: (base) => ({
-              ...base,
-              height: '30px',
-              padding: '0 8px',
-            }),
-            input: (base) => ({
-              ...base,
-              margin: '0px',
-            }),
-            indicatorsContainer: (base) => ({
-              ...base,
-              height: '30px',
-            }),
-          }}
-        />
+    <div className="page-container" style={{ padding: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h1 className="page-title">Control de Presupuestos por PO</h1>
+        
+        <div className="filter-bar" style={{ background: 'white', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', minWidth: '300px' }}>
+          <Select
+            options={purchaseOrders.map(po => ({ value: po.id, label: po.nombre }))}
+            onChange={setFilterPO}
+            value={filterPO}
+            placeholder="Buscar PO..."
+            isClearable
+            isSearchable
+            styles={{
+              control: (base) => ({
+                ...base,
+                minHeight: '32px',
+                height: '32px',
+                fontSize: '0.875rem',
+              }),
+              valueContainer: (base) => ({
+                ...base,
+                height: '30px',
+                padding: '0 8px',
+              }),
+              input: (base) => ({
+                ...base,
+                margin: '0px',
+              }),
+              indicatorsContainer: (base) => ({
+                ...base,
+                height: '30px',
+              }),
+            }}
+          />
+        </div>
       </div>
 
-      <div className="table-container" style={{ marginTop: '16px', overflowY: 'auto' }}>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nombre del Proyecto (PO)</th>
-                <th>Monto PO</th>
-                <th>Budget Indirectos</th>
-                <th>Budget Gastado</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td colSpan="6" className="empty-cell">
-                    <div className="empty-state">Cargando...</div>
-                  </td>
-                </tr>
-              )}
-              {!loading && error && (
-                <tr>
-                  <td colSpan="6" className="empty-cell">
-                    <div className="empty-state" style={{ color: 'var(--err)' }}>{error}</div>
-                  </td>
-                </tr>
-              )}
-              {!loading && !error && filteredAndSortedPOs.length === 0 && (
-                <tr>
-                  <td colSpan="6" className="empty-cell">
-                    <div className="empty-state">No hay purchase orders para mostrar.</div>
-                  </td>
-                </tr>
-              )}
-              {!loading && !error && filteredAndSortedPOs.map(po => (
-                <tr key={po.id}>
-                  <td>{po.id}</td>
-                  <td style={{ fontWeight: 500 }}>{po.nombre}</td>
-                  <td>${po.monto_po.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+      <div className="table-container" style={{ background: 'white', borderRadius: '12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+          <thead style={{ backgroundColor: '#f8fafc' }}>
+            <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9' }}>
+              <th style={{ padding: '16px' }}>ID PO</th>
+              <th>Nombre del Proyecto</th>
+              <th>Presupuesto Indirectos</th>
+              <th>Gasto Acumulado</th>
+              <th>Progreso</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center' }}>Cargando proyectos...</td></tr>
+            )}
+            {!loading && filteredAndSortedPOs.map(po => {
+              const percent = po.budget_indirectos > 0 ? (po.budget_gastado / po.budget_indirectos) * 100 : 0;
+              const isOverBudget = po.budget_indirectos > 0 && po.budget_gastado > po.budget_indirectos;
+              
+              return (
+                <tr key={po.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '16px', fontWeight: 'bold' }}>{po.id}</td>
                   <td>
-                    <input
-                      type="number"
-                      value={po.budget_indirectos}
-                      onChange={(e) => handleBudgetChange(po.id, parseFloat(e.target.value))}
-                      onBlur={(e) => saveBudget(po.id, parseFloat(e.target.value))}
-                      style={{ width: '100px', padding: '4px', border: '1px solid #ccc', borderRadius: '4px' }}
-                    />
+                    <div style={{ fontWeight: 500 }}>{po.nombre}</div>
+                    <div style={{ fontSize: '11px', color: '#64748b' }}>Monto Original: ${po.monto_po.toLocaleString('es-MX')}</div>
                   </td>
-                  <td>${po.budget_gastado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
                   <td>
-                    <span style={{ 
-                      padding: '4px 8px', 
-                      borderRadius: '12px', 
-                      fontSize: '0.75rem', 
-                      fontWeight: 'bold',
-                      backgroundColor: po.budget_status === 'authorized' ? '#dcfce7' : (po.budget_status === 'pending' ? '#fffbeb' : '#fee2e2'),
-                      color: po.budget_status === 'authorized' ? '#16a34a' : (po.budget_status === 'pending' ? '#f59e0b' : '#dc2626'),
-                    }}>
-                      {po.budget_status === 'authorized' ? 'Autorizado' : (po.budget_status === 'pending' ? 'Pendiente' : 'Rechazado')}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: '#64748b' }}>$</span>
+                      <input
+                        type="number"
+                        value={po.budget_indirectos}
+                        onChange={(e) => handleBudgetChange(po.id, parseFloat(e.target.value))}
+                        onBlur={(e) => saveBudget(po.id, parseFloat(e.target.value))}
+                        style={{ 
+                          width: '120px', 
+                          padding: '6px 8px', 
+                          border: '1px solid #e2e8f0', 
+                          borderRadius: '6px',
+                          fontWeight: 'bold',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </td>
+                  <td style={{ fontWeight: 'bold', color: isOverBudget ? '#ef4444' : '#1e293b' }}>
+                    ${po.budget_gastado.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td style={{ minWidth: '150px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ flex: 1, height: '8px', backgroundColor: '#f1f5f9', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ 
+                          width: `${Math.min(percent, 100)}%`, 
+                          height: '100%', 
+                          backgroundColor: percent > 90 ? '#ef4444' : (percent > 70 ? '#f59e0b' : '#10b981')
+                        }}></div>
+                      </div>
+                      <span style={{ fontSize: '12px', fontWeight: 600, minWidth: '35px' }}>{Math.round(percent)}%</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {po.budget_status === 'authorized' ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '12px', backgroundColor: '#dcfce7', color: '#16a34a', fontSize: '12px', fontWeight: 600 }}>
+                          <CheckCircle2 size={14} /> Autorizado
+                        </span>
+                      ) : (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px', borderRadius: '12px', backgroundColor: '#fffbeb', color: '#f59e0b', fontSize: '12px', fontWeight: 600 }}>
+                          <Clock size={14} /> Pendiente
+                        </span>
+                      )}
+                      {isOverBudget && (
+                        <span title="Presupuesto excedido" style={{ color: '#ef4444' }}><AlertCircle size={18} /></span>
+                      )}
+                    </div>
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
