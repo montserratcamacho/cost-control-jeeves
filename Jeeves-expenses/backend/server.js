@@ -522,14 +522,24 @@ app.post('/api/user-config', (req, res) => {
 
 app.get('/api/users/:email/transactions', (req, res) => {
   const { email } = req.params;
+  const { month } = req.query; // YYYY-MM
   try {
-    const transactions = db.prepare(`
+    let query = `
       SELECT t.*, uc.default_clasificacion_contable
       FROM transactions t
       LEFT JOIN user_configs uc ON t.user_email = uc.user_email
       WHERE t.user_email = ? AND t.unique_id NOT LIKE 'txn_%'
-      ORDER BY t.created_at_utc DESC
-    `).all(email);
+    `;
+    const params = [email];
+
+    if (month) {
+      query += ` AND strftime('%Y-%m', t.created_at_utc) = ?`;
+      params.push(month);
+    }
+
+    query += ` ORDER BY t.created_at_utc DESC`;
+    
+    const transactions = db.prepare(query).all(...params);
     res.json({ success: true, transactions });
   } catch (error) {
     console.error("Error fetching user transactions:", error.message);
@@ -537,22 +547,23 @@ app.get('/api/users/:email/transactions', (req, res) => {
   }
 });
 
-app.post('/api/transactions/:id/accounting', (req, res) => {
+app.post('/api/transactions/:id/acceptance', (req, res) => {
   const { id } = req.params;
-  const { clasificacion_contable } = req.body;
+  const { status, reason } = req.body; // status: 1 (accepted), 2 (rejected)
   try {
-    const stmt = db.prepare('UPDATE transactions SET clasificacion_contable = ?, updated_at = ? WHERE unique_id = ?');
-    stmt.run(clasificacion_contable, new Date().toISOString(), id);
+    const stmt = db.prepare('UPDATE transactions SET accepted_status = ?, rejection_reason = ?, updated_at = ? WHERE unique_id = ?');
+    stmt.run(status, reason || null, new Date().toISOString(), id);
     res.json({ success: true });
   } catch (error) {
-    console.error("Error updating transaction accounting:", error.message);
+    console.error("Error updating transaction acceptance:", error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 app.get('/api/export-accounting', (req, res) => {
+  const { month } = req.query;
   try {
-    const transactions = db.prepare(`
+    let query = `
       SELECT 
         t.created_at_utc as Fecha,
         t.user_name as Usuario,
@@ -561,13 +572,30 @@ app.get('/api/export-accounting', (req, res) => {
         t.payment_description as Descripcion,
         t.amount_destination as Monto,
         t.local_currency as Moneda,
-        COALESCE(t.clasificacion_contable, uc.default_clasificacion_contable, 'Sin Clasificar') as Clasificacion_Contable
+        t.po_id as PO,
+        t.sat_uuid as SAT_UUID,
+        t.archivo_factura_url as Factura_URL,
+        COALESCE(t.clasificacion_contable, uc.default_clasificacion_contable, 'Sin Clasificar') as Clasificacion_Contable,
+        CASE 
+          WHEN t.accepted_status = 1 THEN 'Aceptado'
+          WHEN t.accepted_status = 2 THEN 'Rechazado'
+          ELSE 'Pendiente'
+        END as Estado_Aceptacion,
+        t.rejection_reason as Motivo_Rechazo
       FROM transactions t
       LEFT JOIN user_configs uc ON t.user_email = uc.user_email
       WHERE t.unique_id NOT LIKE 'txn_%'
-      ORDER BY t.created_at_utc DESC
-    `).all();
+    `;
     
+    const params = [];
+    if (month) {
+      query += ` AND strftime('%Y-%m', t.created_at_utc) = ?`;
+      params.push(month);
+    }
+    
+    query += ` ORDER BY t.created_at_utc DESC`;
+    
+    const transactions = db.prepare(query).all(...params);
     res.json({ success: true, transactions });
   } catch (error) {
     console.error("Error exporting accounting:", error.message);

@@ -50,10 +50,10 @@ export default function Users() {
 
   const handleExport = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/export-accounting');
+      const response = await fetch(`http://localhost:3001/api/export-accounting?month=${selectedMonth}`);
       const result = await response.json();
       if (result.success) {
-        const headers = ["Fecha", "Usuario", "Correo", "Establecimiento", "Descripcion", "Monto", "Moneda", "Clasificacion Contable"];
+        const headers = ["Fecha", "Usuario", "Correo", "Establecimiento", "Descripcion", "Monto", "Moneda", "PO", "SAT_UUID", "Factura_URL", "Clasificacion Contable", "Estado Aceptacion", "Motivo Rechazo"];
         const csvRows = [
           headers.join(','),
           ...result.transactions.map(t => [
@@ -64,7 +64,12 @@ export default function Users() {
             `"${t.Descripcion}"`,
             t.Monto,
             t.Moneda,
-            `"${t.Clasificacion_Contable}"`
+            `"${t.PO || ''}"`,
+            `"${t.SAT_UUID || ''}"`,
+            `"${t.Factura_URL || ''}"`,
+            `"${t.Clasificacion_Contable}"`,
+            `"${t.Estado_Aceptacion}"`,
+            `"${t.Motivo_Rechazo || ''}"`
           ].join(','))
         ];
         
@@ -121,7 +126,10 @@ export default function Users() {
             ) : users.map(user => (
               <tr key={user.user_email} style={{ borderBottom: '1px solid #f1f5f9' }}>
                 <td style={{ padding: '16px' }}>
-                  <Link to={`/users/${user.user_email}`} style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', color: '#2563eb', fontWeight: '600' }}>
+                  <Link 
+                    to={`/users/${user.user_email}?month=${selectedMonth}`} 
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none', color: '#2563eb', fontWeight: '600' }}
+                  >
                     <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#eff6ff', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                       <UserIcon size={16} />
                     </div>
