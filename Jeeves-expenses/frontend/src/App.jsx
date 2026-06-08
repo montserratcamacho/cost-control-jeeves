@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard';
 import Transactions from './pages/Transactions';
 import Projects from './pages/Projects';
 import Limits from './pages/Limits';
+import Users from './pages/Users';
+import UserDetail from './pages/UserDetail';
 import './index.css';
 
 function App() {
@@ -99,6 +101,8 @@ function App() {
             <Route path="/transactions" element={<Transactions data={data} />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/limits" element={<Limits />} />
+            <Route path="/users" element={<Users />} />
+            <Route path="/users/:email" element={<UserDetail />} />
           </Routes>
         </div>
       </div>

@@ -471,6 +471,110 @@ app.post('/api/transactions/:id/receipt-photo', uploadDisk.single('photo'), (req
   }
 });
 
+// --- Endpoints de Contabilidad y Usuarios ---
+
+app.get('/api/users-accounting', (req, res) => {
+  const { month } = req.query; // Formato YYYY-MM
+  try {
+    let query = `
+      SELECT 
+        user_email, 
+        user_name, 
+        SUM(amount_destination) as total_spent,
+        (SELECT default_clasificacion_contable FROM user_configs WHERE user_email = t.user_email) as default_classification
+      FROM transactions t
+      WHERE unique_id NOT LIKE 'txn_%'
+    `;
+    
+    const params = [];
+    if (month) {
+      query += ` AND strftime('%Y-%m', created_at_utc) = ?`;
+      params.push(month);
+    }
+    
+    query += ` GROUP BY user_email ORDER BY total_spent DESC`;
+    
+    const users = db.prepare(query).all(...params);
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error("Error fetching users accounting:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/user-config', (req, res) => {
+  const { user_email, user_name, default_clasificacion_contable } = req.body;
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO user_configs (user_email, user_name, default_clasificacion_contable, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_email) DO UPDATE SET
+        default_clasificacion_contable = excluded.default_clasificacion_contable,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(user_email, user_name, default_clasificacion_contable, new Date().toISOString());
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating user config:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/users/:email/transactions', (req, res) => {
+  const { email } = req.params;
+  try {
+    const transactions = db.prepare(`
+      SELECT t.*, uc.default_clasificacion_contable
+      FROM transactions t
+      LEFT JOIN user_configs uc ON t.user_email = uc.user_email
+      WHERE t.user_email = ? AND t.unique_id NOT LIKE 'txn_%'
+      ORDER BY t.created_at_utc DESC
+    `).all(email);
+    res.json({ success: true, transactions });
+  } catch (error) {
+    console.error("Error fetching user transactions:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/transactions/:id/accounting', (req, res) => {
+  const { id } = req.params;
+  const { clasificacion_contable } = req.body;
+  try {
+    const stmt = db.prepare('UPDATE transactions SET clasificacion_contable = ?, updated_at = ? WHERE unique_id = ?');
+    stmt.run(clasificacion_contable, new Date().toISOString(), id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating transaction accounting:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/export-accounting', (req, res) => {
+  try {
+    const transactions = db.prepare(`
+      SELECT 
+        t.created_at_utc as Fecha,
+        t.user_name as Usuario,
+        t.user_email as Correo,
+        t.payee as Establecimiento,
+        t.payment_description as Descripcion,
+        t.amount_destination as Monto,
+        t.local_currency as Moneda,
+        COALESCE(t.clasificacion_contable, uc.default_clasificacion_contable, 'Sin Clasificar') as Clasificacion_Contable
+      FROM transactions t
+      LEFT JOIN user_configs uc ON t.user_email = uc.user_email
+      WHERE t.unique_id NOT LIKE 'txn_%'
+      ORDER BY t.created_at_utc DESC
+    `).all();
+    
+    res.json({ success: true, transactions });
+  } catch (error) {
+    console.error("Error exporting accounting:", error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.listen(3001, () => {
   console.log('Server running on 3001');
   // La sincronización se puede disparar manualmente o por polling si se desea
