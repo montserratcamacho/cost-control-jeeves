@@ -614,9 +614,10 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const PORT = process.env.PORT || 8080;
+console.log(`🚀 Intentando iniciar servidor en puerto ${PORT}...`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Servidor escuchando en puerto ${PORT} (0.0.0.0)`);
   // La sincronización se puede disparar manualmente o por polling si se desea
   // performSync().catch(err => console.error('Error en sincronización inicial:', err.message));
 });
