@@ -15,6 +15,7 @@ WORKDIR /app/Jeeves-expenses/backend
 # Install build tools for better-sqlite3
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 RUN npm install --production
+RUN npm rebuild better-sqlite3
 
 # Stage 2: Final image
 FROM node:20

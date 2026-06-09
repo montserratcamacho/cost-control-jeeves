@@ -3,9 +3,12 @@ const https = require('https');
 const fs = require('fs');
 require('dotenv').config();
 
+const certPath = process.env.JEEVES_CERT_PATH;
+const keyPath = process.env.JEEVES_KEY_PATH;
+
 const httpsAgent = new https.Agent({
-  cert: fs.existsSync(process.env.JEEVES_CERT_PATH) ? fs.readFileSync(process.env.JEEVES_CERT_PATH) : undefined,
-  key: fs.existsSync(process.env.JEEVES_KEY_PATH) ? fs.readFileSync(process.env.JEEVES_KEY_PATH) : undefined,
+  cert: certPath && fs.existsSync(certPath) ? fs.readFileSync(certPath) : undefined,
+  key: keyPath && fs.existsSync(keyPath) ? fs.readFileSync(keyPath) : undefined,
   rejectUnauthorized: false
 });
 
