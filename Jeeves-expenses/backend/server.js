@@ -13,6 +13,9 @@ require('dotenv').config();
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const storage = multer.diskStorage({
@@ -459,7 +462,9 @@ app.post('/api/transactions/:id/receipt-photo', uploadDisk.single('photo'), (req
   const { id } = req.params;
   if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
 
-  const photoUrl = `http://localhost:3001/uploads/receipts/${req.file.filename}`;
+  const host = req.get('host');
+  const protocol = req.protocol;
+  const photoUrl = `${protocol}://${host}/uploads/receipts/${req.file.filename}`;
   
   try {
     const stmt = db.prepare('UPDATE transactions SET archivo_factura_url = ?, archivo_factura_nombre = ?, updated_at = ? WHERE unique_id = ?');
@@ -603,8 +608,15 @@ app.get('/api/export-accounting', (req, res) => {
   }
 });
 
-app.listen(3001, () => {
-  console.log('Server running on 3001');
+// The "catchall" handler: for any request that doesn't
+// match one above, send back React's index.html file.
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+});
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
   // La sincronización se puede disparar manualmente o por polling si se desea
   // performSync().catch(err => console.error('Error en sincronización inicial:', err.message));
 });

@@ -12,7 +12,7 @@ export default function Projects() {
 
   const fetchData = () => {
     setLoading(true);
-    fetch('http://localhost:3001/api/purchase-orders')
+    fetch('/api/purchase-orders')
       .then(res => {
         if (!res.ok) throw new Error('Network response was not ok');
         return res.json();
@@ -45,7 +45,7 @@ export default function Projects() {
 
   const saveBudget = async (poId, value) => {
     try {
-      await fetch('http://localhost:3001/api/project-budget', {
+      await fetch('/api/project-budget', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ po_id: poId, budget_indirectos: value, updated_by: 'project_manager' }),

@@ -67,7 +67,7 @@ export default function UserDetail() {
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      const url = `http://localhost:3001/api/users/${email}/transactions${month ? `?month=${month}` : ''}`;
+      const url = `/api/users/${email}/transactions${month ? `?month=${month}` : ''}`;
       const response = await fetch(url);
       const result = await response.json();
       if (result.success) {
@@ -86,7 +86,7 @@ export default function UserDetail() {
 
   const handleAcceptance = async (txnId, status, reason = null) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/transactions/${txnId}/acceptance`, {
+      const response = await fetch(`/api/transactions/${txnId}/acceptance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, reason })
@@ -105,7 +105,7 @@ export default function UserDetail() {
 
   const handleAccountingChange = async (txnId, option) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/transactions/${txnId}/accounting`, {
+      const response = await fetch(`/api/transactions/${txnId}/accounting`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clasificacion_contable: option.value })

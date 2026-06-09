@@ -16,7 +16,7 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   const fetchData = (shouldSync = false) => {
-    fetch('http://localhost:3001/api/init')
+    fetch('/api/init')
       .then(res => res.json())
       .then(result => {
         setData(result);
@@ -25,7 +25,7 @@ function App() {
         if (shouldSync && !isSyncing) {
           setIsSyncing(true);
           // Iniciar sincronización en segundo plano solo si se solicita
-          fetch('http://localhost:3001/api/sync-jeeves', { method: 'POST' })
+          fetch('/api/sync-jeeves', { method: 'POST' })
             .then(res => res.json())
             .then(syncResult => {
               if (syncResult.success) {
@@ -61,7 +61,7 @@ function App() {
     }
     setIsSyncing(true);
     try {
-      const response = await fetch('http://localhost:3001/api/sync-jeeves', { method: 'POST' });
+      const response = await fetch('/api/sync-jeeves', { method: 'POST' });
       const result = await response.json();
       if (result.success) {
         alert(`Sincronización exitosa: ${result.count} procesadas (${result.totalInDb} totales en base de datos).`);

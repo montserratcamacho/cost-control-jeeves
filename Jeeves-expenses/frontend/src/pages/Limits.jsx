@@ -13,8 +13,8 @@ export default function Limits() {
     try {
       setLoading(true);
       const [pendingRes, allRes] = await Promise.all([
-        fetch('http://localhost:3001/api/project-budgets/pending'),
-        fetch('http://localhost:3001/api/purchase-orders')
+        fetch('/api/project-budgets/pending'),
+        fetch('/api/purchase-orders')
       ]);
       
       const pendingData = await pendingRes.json();
@@ -64,7 +64,7 @@ export default function Limits() {
     if (selectedBudgets.length === 0) return;
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/api/project-budgets/authorize', {
+      const response = await fetch('/api/project-budgets/authorize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ po_ids: selectedBudgets, status: 'authorized', updated_by: 'admin' }),

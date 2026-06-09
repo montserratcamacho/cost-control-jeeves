@@ -20,7 +20,7 @@ function ReceiptPhotoModal({ txn, onClose, onUpload }) {
     formData.append('photo', file);
 
     try {
-      const response = await fetch(`http://localhost:3001/api/transactions/${txn.unique_id}/receipt-photo`, {
+      const response = await fetch(`/api/transactions/${txn.unique_id}/receipt-photo`, {
         method: 'POST',
         body: formData
       });
@@ -202,7 +202,7 @@ export default function Transactions({ data }) {
 
   const handleUpdate = async (id, field, value) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/transactions/${id}/update`, {
+      const response = await fetch(`/api/transactions/${id}/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ field, value, updated_by: data?.userEmail })
@@ -225,7 +225,7 @@ export default function Transactions({ data }) {
 
     try {
       for (const id of ids) {
-        await fetch(`http://localhost:3001/api/transactions/${id}/update`, {
+        await fetch(`/api/transactions/${id}/update`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ field: 'needs_validation', value: 0, updated_by: data?.userEmail })
@@ -263,7 +263,7 @@ export default function Transactions({ data }) {
     
     setLoadingHistorical(true);
     try {
-      const response = await fetch('http://localhost:3001/api/import-historical', { method: 'POST' });
+      const response = await fetch('/api/import-historical', { method: 'POST' });
       const result = await response.json();
       if (result.success) {
         alert(result.message);
@@ -286,7 +286,7 @@ export default function Transactions({ data }) {
     else formData.append('manualText', fileOrText);
 
     try {
-      const response = await fetch(`http://localhost:3001/api/transactions/${id}/invoice`, {
+      const response = await fetch(`/api/transactions/${id}/invoice`, {
         method: 'POST',
         body: formData
       });

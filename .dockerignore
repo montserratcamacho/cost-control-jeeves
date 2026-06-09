@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+jeeves.db
+jeeves.db-shm
+jeeves.db-wal
+Historicos
+__MACOSX
+keys
+*.xlsx
+.git
+.cursor
+terminals
+agent-transcripts

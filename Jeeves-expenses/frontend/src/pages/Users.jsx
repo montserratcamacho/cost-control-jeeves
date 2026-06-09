@@ -12,7 +12,7 @@ export default function Users() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:3001/api/users-accounting?month=${selectedMonth}`);
+      const response = await fetch(`/api/users-accounting?month=${selectedMonth}`);
       const result = await response.json();
       if (result.success) {
         setUsers(result.users);
@@ -30,7 +30,7 @@ export default function Users() {
 
   const handleDefaultClassificationChange = async (email, name, option) => {
     try {
-      const response = await fetch('http://localhost:3001/api/user-config', {
+      const response = await fetch('/api/user-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -50,7 +50,7 @@ export default function Users() {
 
   const handleExport = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/export-accounting?month=${selectedMonth}`);
+      const response = await fetch(`/api/export-accounting?month=${selectedMonth}`);
       const result = await response.json();
       if (result.success) {
         const headers = ["Fecha", "Usuario", "Correo", "Establecimiento", "Descripcion", "Monto", "Moneda", "PO", "SAT_UUID", "Factura_URL", "Clasificacion Contable", "Estado Aceptacion", "Motivo Rechazo"];
